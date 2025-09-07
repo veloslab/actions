@@ -1,0 +1,67 @@
+# .github/actions/publish-python-package/action.yml
+name: 'Build and Publish Python Package'
+description: 'Installs dependencies, builds, and publishes a Python package to Gitea'
+inputs:
+  gitea_user:
+    description: 'Username for the Gitea'
+    required: true
+  gitea_password:
+    description: 'Password or token for the Gitea'
+    required: true
+  gitea_org:
+    description: 'Org of the Gitea package repository'
+    required: false
+    default: 'veloslab'
+  gitea_domain:
+    description: 'Domain for Gitea'
+    required: false
+    default: 'gitea.veloslab.lan'
+  run_tests:
+    description: 'Set to "true" to run pytest before publishing.'
+    required: false
+    default: 'false'
+runs:
+  using: "composite"
+  steps:
+    - name: Install Poetry Manually
+      shell: bash
+      run: |
+        curl -sSL https://install.python-poetry.org | python3 -
+        echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+    # New step to download the CA certificate from the Gitea URL
+    - name: Download Gitea CA Certificate
+      shell: bash
+      run: |
+        openssl s_client -showcerts -connect ${{ inputs.gitea_domain }}:443 < /dev/null 2>/dev/null | sed -n -e '/-BEGIN CERTIFICATE-/,/-END CERTIFICATE-/p' > ca_chain.pem
+
+    # Updated step to configure the repository and set the new CA certificate
+    - name: Configure Poetry Repository
+      shell: bash
+      run: |
+        poetry config repositories.gitea https://${{ inputs.gitea_domain }}/api/packages/${{ inputs.gitea_org }}/pypi/
+        poetry config http-basic.gitea ${{ inputs.gitea_user }} ${{ inputs.gitea_password }}
+        # Tell Poetry to use the downloaded certificate for the 'gitea' repository
+        poetry config certificates.gitea.cert ca_chain.pem
+
+    - name: Install Project Dependencies
+      shell: bash
+      run: poetry install --no-interaction --no-root --with dev
+
+    - name: Conditionally Run Tests
+      shell: bash
+      run: |
+        if [ "${{ inputs.run_tests }}" = 'true' ]; then
+          echo "Running tests..."
+          poetry run pytest
+        else
+          echo "Skipping tests."
+        fi
+
+    - name: Build the package distributions
+      shell: bash
+      run: poetry build
+
+    - name: Publish package to Gitea PyPI
+      shell: bash
+      run: poetry publish --repository gitea --no-interaction
