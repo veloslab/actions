@@ -13,7 +13,7 @@ inputs:
   gitea_org:
     description: 'Organization of the Gitea package repository'
     required: false
-    default: 'veloslab'
+    default: 'python'
   gitea_domain:
     description: 'The base domain for your Gitea instance'
     required: false
