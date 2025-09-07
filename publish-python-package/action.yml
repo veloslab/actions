@@ -69,4 +69,4 @@ runs:
         POETRY_HTTP_BASIC_GITEA_USERNAME: ${{ inputs.gitea_username }}
         POETRY_HTTP_BASIC_GITEA_PASSWORD: ${{ inputs.gitea_password }}
       shell: bash
-      run: poetry publish --repository gitea --no-interaction -vvv
+      run: poetry publish --repository gitea --no-interaction
