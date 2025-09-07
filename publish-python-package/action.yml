@@ -21,7 +21,7 @@ inputs:
   run_tests:
     description: 'Set to "true" to run pytest before publishing'
     required: false
-    default: 'false'
+    default: 'true'
 
 runs:
   using: "composite"
