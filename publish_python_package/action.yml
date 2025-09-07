@@ -1,67 +1,72 @@
 # .github/actions/publish-python-package/action.yml
 name: 'Build and Publish Python Package'
-description: 'Installs dependencies, builds, and publishes a Python package to Gitea'
+description: 'Installs dependencies, builds, and publishes a Python package to a Gitea repository'
+
+# Define the inputs the action will accept
 inputs:
-  gitea_user:
-    description: 'Username for the Gitea'
+  gitea_username:
+    description: 'Username for the Gitea repository'
     required: true
   gitea_password:
-    description: 'Password or token for the Gitea'
+    description: 'Password or token for the Gitea repository'
     required: true
   gitea_org:
-    description: 'Org of the Gitea package repository'
+    description: 'Organization of the Gitea package repository'
     required: false
     default: 'veloslab'
   gitea_domain:
-    description: 'Domain for Gitea'
+    description: 'The base domain for your Gitea instance'
     required: false
     default: 'gitea.veloslab.lan'
   run_tests:
-    description: 'Set to "true" to run pytest before publishing.'
+    description: 'Set to "true" to run pytest before publishing'
     required: false
     default: 'false'
+
 runs:
   using: "composite"
   steps:
-    - name: Install Poetry Manually
+    - name: Install Poetry
       shell: bash
       run: |
         curl -sSL https://install.python-poetry.org | python3 -
         echo "$HOME/.local/bin" >> $GITHUB_PATH
 
-    # New step to download the CA certificate from the Gitea URL
     - name: Download Gitea CA Certificate
       shell: bash
       run: |
         openssl s_client -showcerts -connect ${{ inputs.gitea_domain }}:443 < /dev/null 2>/dev/null | sed -n -e '/-BEGIN CERTIFICATE-/,/-END CERTIFICATE-/p' > ca_chain.pem
 
-    # Updated step to configure the repository and set the new CA certificate
     - name: Configure Poetry Repository
       shell: bash
       run: |
+        # Set up the repository URL and configure Poetry to trust the downloaded CA certificate
         poetry config repositories.gitea https://${{ inputs.gitea_domain }}/api/packages/${{ inputs.gitea_org }}/pypi/
-        poetry config http-basic.gitea ${{ inputs.gitea_user }} ${{ inputs.gitea_password }}
-        # Tell Poetry to use the downloaded certificate for the 'gitea' repository
         poetry config certificates.gitea.cert ca_chain.pem
 
     - name: Install Project Dependencies
+      # Use environment variables for authentication when fetching dependencies
+      env:
+        POETRY_HTTP_BASIC_GITEA_USERNAME: ${{ inputs.gitea_username }}
+        POETRY_HTTP_BASIC_GITEA_PASSWORD: ${{ inputs.gitea_password }}
       shell: bash
       run: poetry install --no-interaction --no-root --with dev
 
     - name: Conditionally Run Tests
+      if: inputs.run_tests == 'true'
       shell: bash
       run: |
-        if [ "${{ inputs.run_tests }}" = 'true' ]; then
-          echo "Running tests..."
-          poetry run pytest
-        else
-          echo "Skipping tests."
-        fi
+        echo "Running tests..."
+        poetry run pytest
 
     - name: Build the package distributions
       shell: bash
       run: poetry build
 
-    - name: Publish package to Gitea PyPI
+    - name: Publish package to Gitea
+      # Use environment variables for authentication when publishing
+      env:
+        POETRY_HTTP_BASIC_GITEA_USERNAME: ${{ inputs.gitea_username }}
+        POETRY_HTTP_BASIC_GITEA_PASSWORD: ${{ inputs.gitea_password }}
       shell: bash
-      run: poetry publish --repository gitea --no-interaction
+      run: poetry publish --repository gitea --no-interaction -vvv
